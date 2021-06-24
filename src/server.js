@@ -38,7 +38,7 @@ app.get("/validsession", async (req, res) => {
 
         if(!token) return res.sendStatus(401);
         
-        const result = await connection.query(
+        const result = await connection.query(  
             `SELECT * FROM sessions
             JOIN users ON sessions."userId" = users.id
             WHERE sessions.token = $1`, [token]
@@ -62,28 +62,35 @@ app.get("/validsession", async (req, res) => {
 app.post("/signin", async (req, res) => {
     try {
         const { email, password } = req.body;
-        console.log(email, password);
 
-        const user = await connection.query(
+        const result = await connection.query(
             `SELECT * 
             FROM users 
             WHERE email = $1`,
             [email]
         );
         
-        console.log(user.rows[0]);
-        console.log(user.rows[0].hash);
-        console.log(bcrypt.compareSync(""+password, user.rows[0].hash));
+        if(result.rows.length === 0) return res.sendStatus(400);
 
-        if(user && bcrypt.compareSync(""+password, user.rows[0].hash)){
+        const user = result.rows[0];
+
+        console.log(user);
+        console.log(user.hash);
+        console.log(bcrypt.compareSync(password, user.hash));
+
+        if(user && bcrypt.compareSync(password, user.hash)){
             const token = uuid();
 
             await connection.query(
                 `INSERT INTO sessions ("userId", token)
-                VALUES ($1, $2)`, [user.rows[0].id, token]
+                VALUES ($1, $2)`, [user.id, token]
             );
 
-            res.send(token);
+            res.send({
+                id: user.id,
+                name: user.name,
+                token: token
+            });
         }
         else {
             res.sendStatus(401);
@@ -128,19 +135,6 @@ app.post("/signup", async (req, res)=> {
     } catch(e){
         console.log(e);
         res.sendStatus(500);
-    }
-});
-
-app.get("/signup", async (req, res) => {
-    try {
-        const users = await connection.query(
-            `SELECT * FROM users`
-            );
-            
-        res.send(users.rows);
-    } catch(e){
-        console.log(e);
-        res.send(500);
     }
 });
 
