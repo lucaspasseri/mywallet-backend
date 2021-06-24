@@ -5,6 +5,8 @@ import bcrypt from 'bcrypt';
 import { v4 as uuid } from 'uuid';
 
 import {newUserSchema} from './schemas/signupSchema.js';
+import { signinSchema } from './schemas/signinSchema.js';
+import { transactionsSchema } from './schemas/transactionsSchema.js';
 
 const app = express();
 
@@ -21,6 +23,41 @@ const databaseConfig = {
 
 const { Pool } = pg;
 const connection = new Pool(databaseConfig);
+
+app.post("/historic/:op", async (req, res) => {
+    try {
+        const {amount, description} = req.body;
+        const {op} = req.params;
+
+        console.log(amount);
+        console.log(description);
+        console.log(op);
+
+        let categoryId; 
+        if(op === "c"){
+            categoryId = 1; 
+        } else {
+            categoryId = 2;
+        }
+
+        const errors = transactionsSchema.validate(req.body).error;
+
+        if(errors) return res.sendStatus(400);
+
+        await connection.query(
+            `INSERT INTO transactions 
+            ("userId", "categoryId", "eventDate", description, amount)
+            VALUES ($1, $2, $3, $4, $5)`,
+            [6, categoryId, Date.now(), description, amount*100]
+        );
+        
+        res.sendStatus(201);
+
+    } catch(e) {
+        console.log(e);
+        res.sendStatus(500);
+    }
+});
 
 app.get("/historic", async (req, res) => {
     try {
@@ -96,6 +133,10 @@ app.get("/validsession", async (req, res) => {
 app.post("/signin", async (req, res) => {
     try {
         const { email, password } = req.body;
+
+        const errors = signinSchema.validate(req.body).error;
+
+        if(errors) return res.sendStatus(400);
 
         const result = await connection.query(
             `SELECT * 
