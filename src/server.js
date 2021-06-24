@@ -22,6 +22,40 @@ const databaseConfig = {
 const { Pool } = pg;
 const connection = new Pool(databaseConfig);
 
+app.get("/historic", async (req, res) => {
+    try {
+
+        const authorization = req.header("Authorization");
+        const token = authorization.replace("Bearer ", "");
+
+        const result = await connection.query(
+            `SELECT * FROM transactions`
+        );
+
+        const transactions = result.rows;
+
+        const balance = transactions.reduce((acc, t) => {
+            if(t.categoryId === 1){
+                return acc + t.amount;
+            } else {
+                return acc - t.amount;
+            }
+            
+        }, 0);
+
+        const historic = {
+            transactions,
+            balance
+        };
+
+        res.send(historic);
+
+    } catch (e){
+        console.log(e);
+        res.sendStatus(500);
+    }
+});
+
 app.get("/validsession", async (req, res) => {
     try {
 
