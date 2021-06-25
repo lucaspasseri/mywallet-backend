@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import bcrypt from 'bcrypt';
 import { v4 as uuid } from 'uuid';
+import { stripHtml } from "string-strip-html";
 
 import {newUserSchema} from './schemas/signupSchema.js';
 import { signinSchema } from './schemas/signinSchema.js';
@@ -41,6 +42,7 @@ app.delete("/session", async (req, res)=> {
 
 app.post("/historic/:op", async (req, res) => {
     try {
+        console.log(1);
         const authorization = req.header("Authorization");
         const token = authorization?.replace("Bearer ", "");
 
@@ -49,9 +51,10 @@ app.post("/historic/:op", async (req, res) => {
             JOIN users ON sessions."userId" = users.id
             WHERE sessions.token = $1`, [token]
         );
-
+        console.log(2);
         const user = existUser.rows[0];
         if(user){
+            console.log(3);
             const errors = transactionsSchema.validate(req.body).error;
 
             if(errors) return res.sendStatus(400);
@@ -59,6 +62,7 @@ app.post("/historic/:op", async (req, res) => {
             const {amount, description} = req.body;
             const {op} = req.params;
 
+            console.log(4);
             let categoryId; 
             if(op === "c"){
                 categoryId = 1; 
@@ -68,13 +72,16 @@ app.post("/historic/:op", async (req, res) => {
                 return res.sendStatus(400);
             }
 
+            let sanatizedDescription = description.trim();
+            sanatizedDescription = stripHtml(sanatizedDescription).result;
+
             await connection.query(
                 `INSERT INTO transactions 
                 ("userId", "categoryId", "eventDate", description, amount)
                 VALUES ($1, $2, $3, $4, $5)`,
-                [user.id, categoryId, Date.now(), description, amount ]
+                [user.id, categoryId, Date.now(), sanatizedDescription, amount ]
             );
-            
+            console.log(7);
             res.sendStatus(201);
         } else {
             res.sendStatus(401);
@@ -240,12 +247,17 @@ app.post("/signup", async (req, res)=> {
             [email]
         );
 
+        let sanatizedName = name.trim();
+        sanatizedName = stripHtml(sanatizedName).result;
+        let sanatizedEmail = email.trim();
+        sanatizedEmail = stripHtml(sanatizedEmail).result;
+
         if(result.rows.length === 0){
             await connection.query(`
                 INSERT INTO users 
                 (name, email, hash)
                 VALUES ($1, $2, $3)`,
-                [name, email, hash]
+                [sanatizedName, sanatizedEmail, hash]
             );  
 
             res.sendStatus(201);
@@ -255,22 +267,6 @@ app.post("/signup", async (req, res)=> {
         
     } catch(e){
         console.log(e);
-        res.sendStatus(500);
-    }
-});
-
-function getRandomIntInclusive(min, max) {
-    min = Math.ceil(min);
-    max = Math.floor(max);
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-app.get("/", (req, res) => {
-    const randNumber = getRandomIntInclusive(0,10);
-    console.log(randNumber);
-    if(randNumber>= 5){
-        res.sendStatus(200);
-    } else {
         res.sendStatus(500);
     }
 });
