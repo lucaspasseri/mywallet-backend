@@ -41,19 +41,17 @@ app.delete("/session", async (req, res)=> {
 
 app.post("/historic/:op", async (req, res) => {
     try {
-
         const authorization = req.header("Authorization");
-        const token = authorization.replace("Bearer ", "");
+        const token = authorization?.replace("Bearer ", "");
 
         const existUser = await connection.query(
             `SELECT * FROM sessions
             JOIN users ON sessions."userId" = users.id
             WHERE sessions.token = $1`, [token]
         );
-        
+
         const user = existUser.rows[0];
         if(user){
-
             const errors = transactionsSchema.validate(req.body).error;
 
             if(errors) return res.sendStatus(400);
@@ -76,19 +74,19 @@ app.post("/historic/:op", async (req, res) => {
                 VALUES ($1, $2, $3, $4, $5)`,
                 [user.id, categoryId, Date.now(), description, amount ]
             );
-
+            
             res.sendStatus(201);
         } else {
             res.sendStatus(401);
         }
 
     } catch(e) {
-        console.log(e);
 
         if(e.message.indexOf(`is out of range for type integer`) !== -1){
             res.sendStatus(501);
+        }else {
+            res.sendStatus(500);
         }
-        res.sendStatus(500);
     }      
 });
 
@@ -96,7 +94,7 @@ app.get("/historic", async (req, res) => {
     try {
 
         const authorization = req.header("Authorization");
-        const token = authorization.replace("Bearer ", "");
+        const token = authorization?.replace("Bearer ", "");
 
         const existUser = await connection.query(
             `SELECT * FROM sessions
@@ -178,7 +176,6 @@ app.get("/historic", async (req, res) => {
         }
         
     } catch (e){
-        console.log(e);
         res.sendStatus(500);
     }
 });
@@ -258,6 +255,22 @@ app.post("/signup", async (req, res)=> {
         
     } catch(e){
         console.log(e);
+        res.sendStatus(500);
+    }
+});
+
+function getRandomIntInclusive(min, max) {
+    min = Math.ceil(min);
+    max = Math.floor(max);
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+app.get("/", (req, res) => {
+    const randNumber = getRandomIntInclusive(0,10);
+    console.log(randNumber);
+    if(randNumber>= 5){
+        res.sendStatus(200);
+    } else {
         res.sendStatus(500);
     }
 });
