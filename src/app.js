@@ -1,13 +1,13 @@
-import express from 'express';
-import cors from 'cors';
-import bcrypt from 'bcrypt';
-import { v4 as uuid } from 'uuid';
+import express from "express";
+import cors from "cors";
+import bcrypt from "bcrypt";
+import { v4 as uuid } from "uuid";
 import { stripHtml } from "string-strip-html";
 
-import {newUserSchema} from './schemas/signupSchema.js';
-import { signinSchema } from './schemas/signinSchema.js';
-import { transactionsSchema } from './schemas/transactionsSchema.js';
-import connection from './database.js';
+import {newUserSchema} from "./schemas/signupSchema.js";
+import { signinSchema } from "./schemas/signinSchema.js";
+import { transactionsSchema } from "./schemas/transactionsSchema.js";
+import connection from "./database.js";
 
 const app = express();
 
@@ -15,260 +15,256 @@ app.use(express.json());
 app.use(cors());
 
 app.delete("/session", async (req, res)=> {
-    try {
-        const authorization = req.header("Authorization");
-        const token = authorization.replace("Bearer ", "");
+	try {
+		const authorization = req.header("Authorization");
+		const token = authorization.replace("Bearer ", "");
 
-        const existUser = await connection.query(
-            `SELECT * FROM sessions
+		const existUser = await connection.query(
+			`SELECT * FROM sessions
             JOIN users ON sessions."userId" = users.id
             WHERE sessions.token = $1`, [token]
-        );
+		);
 
-        const user = existUser.rows[0];
-        if(user){
-            await connection.query(
-                `DELETE FROM sessions 
+		const user = existUser.rows[0];
+		if(user){
+			await connection.query(
+				`DELETE FROM sessions 
                 WHERE "userId" = $1`,
-                [user.id]
-            );
-            res.sendStatus(200);
-        }
-    } catch(e) {
-        console.log(e);
-        res.sendStatus(500);
-    }
+				[user.id]
+			);
+			res.sendStatus(200);
+		}
+	} catch(e) {
+		console.log(e);
+		res.sendStatus(500);
+	}
 });
 
 app.post("/historic/:op", async (req, res) => {
-    try {
-        console.log(1);
-        const authorization = req.header("Authorization");
-        const token = authorization?.replace("Bearer ", "");
+	try {
+		const authorization = req.header("Authorization");
+		const token = authorization?.replace("Bearer ", "");
 
-        const existUser = await connection.query(
-            `SELECT * FROM sessions
+		const existUser = await connection.query(
+			`SELECT * FROM sessions
             JOIN users ON sessions."userId" = users.id
             WHERE sessions.token = $1`, [token]
-        );
-        console.log(2);
-        const user = existUser.rows[0];
-        if(user){
-            console.log(3);
-            const errors = transactionsSchema.validate(req.body).error;
+		);
+		const user = existUser.rows[0];
+		if(user){
+			const errors = transactionsSchema.validate(req.body).error;
 
-            if(errors) return res.sendStatus(400);
+			if(errors) return res.sendStatus(400);
 
-            const {amount, description} = req.body;
-            const {op} = req.params;
+			const {amount, description} = req.body;
+			const {op} = req.params;
+			
+			let categoryId; 
+			if(op === "c"){
+				categoryId = 1; 
+			} else if(op ==="d") {
+				categoryId = 2;
+			} else {
+				return res.sendStatus(400);
+			}
 
-            console.log(4);
-            let categoryId; 
-            if(op === "c"){
-                categoryId = 1; 
-            } else if(op ==="d") {
-                categoryId = 2;
-            } else {
-                return res.sendStatus(400);
-            }
+			let sanatizedDescription = description.trim();
+			sanatizedDescription = stripHtml(sanatizedDescription).result;
 
-            let sanatizedDescription = description.trim();
-            sanatizedDescription = stripHtml(sanatizedDescription).result;
-
-            await connection.query(
-                `INSERT INTO transactions 
+			await connection.query(
+				`INSERT INTO transactions 
                 ("userId", "categoryId", "eventDate", description, amount)
                 VALUES ($1, $2, $3, $4, $5)`,
-                [user.id, categoryId, Date.now(), sanatizedDescription, amount ]
-            );
-            console.log(7);
-            res.sendStatus(201);
-        } else {
-            res.sendStatus(401);
-        }
+				[user.id, categoryId, Date.now(), sanatizedDescription, amount ]
+			);
+			console.log(7);
+			res.sendStatus(201);
+		} else {
+			res.sendStatus(401);
+		}
 
-    } catch(e) {
+	} catch(e) {
 
-        if(e.message.indexOf(`is out of range for type integer`) !== -1){
-            res.sendStatus(501);
-        }else {
-            res.sendStatus(500);
-        }
-    }      
+		if(e.message.indexOf("is out of range for type integer") !== -1){
+			res.sendStatus(501);
+		}else {
+			res.sendStatus(500);
+		}
+	}      
 });
 
 app.get("/historic", async (req, res) => {
-    try {
+	try {
 
-        const authorization = req.header("Authorization");
-        const token = authorization?.replace("Bearer ", "");
+		const authorization = req.header("Authorization");
+		const token = authorization?.replace("Bearer ", "");
 
-        const existUser = await connection.query(
-            `SELECT * FROM sessions
+		const existUser = await connection.query(
+			`SELECT * FROM sessions
             JOIN users ON sessions."userId" = users.id
             WHERE sessions.token = $1`, [token]
-        );
+		);
         
-        const user = existUser.rows[0];
-        if(user){
-            const result = await connection.query(
-                `SELECT * FROM transactions
+		const user = existUser.rows[0];
+		if(user){
+			const result = await connection.query(
+				`SELECT * FROM transactions
                 JOIN users ON transactions."userId" = users.id
                 WHERE users.id = $1`, [user.id]  
-            );                            
+			);                            
 
-            const transactions = result.rows;
-            let balanceCents = 0;
+			const transactions = result.rows;
+			let balanceCents = 0;
 
-            if(transactions.length>0){
-                balanceCents = transactions.reduce((acc, t) => {
-                    if(t.categoryId === 1){
-                        return acc + t.amount;
-                    } else {
-                        return acc - t.amount;
-                    }
+			if(transactions.length>0){
+				balanceCents = transactions.reduce((acc, t) => {
+					if(t.categoryId === 1){
+						return acc + t.amount;
+					} else {
+						return acc - t.amount;
+					}
                     
-                }, 0);
-            }
+				}, 0);
+			}
     
-            let balanceStatus;
-            if(balanceCents > 0){
-                balanceStatus="positive";
-            } else if (balanceCents<0){
-                balanceStatus="negative";
-            } else {
-                balanceStatus="zero";
-            }
+			let balanceStatus;
+			if(balanceCents > 0){
+				balanceStatus="positive";
+			} else if (balanceCents<0){
+				balanceStatus="negative";
+			} else {
+				balanceStatus="zero";
+			}
 
-            let balance;
+			let balance;
 
-            if(balanceCents <= -100 || balanceCents>= 100){
-                const sBalance = String(balanceCents);
-                const integerPart = sBalance.substring(0,sBalance.length-2);
-                const decimalPart = sBalance.substring(sBalance.length-2,sBalance.length);
-                balance = integerPart+","+decimalPart;
+			if(balanceCents <= -100 || balanceCents>= 100){
+				const sBalance = String(balanceCents);
+				const integerPart = sBalance.substring(0,sBalance.length-2);
+				const decimalPart = sBalance.substring(sBalance.length-2,sBalance.length);
+				balance = integerPart+","+decimalPart;
 
-            } else {
-                if(balanceCents <= -10 || balanceCents >= 10){
-                    if(balanceCents<0){
-                        balance = "-0,"+Math.abs(balanceCents);
-                    }
-                    else {
-                        balance = "0,"+balanceCents;
-                    }
-                } else {
-                    if(balanceCents<0){
-                        balance = "-0,0"+Math.abs(balanceCents);
-                    }
-                    else {
-                        balance = "0,0"+balanceCents;
-                    }
-                }
-            }
+			} else {
+				if(balanceCents <= -10 || balanceCents >= 10){
+					if(balanceCents<0){
+						balance = "-0,"+Math.abs(balanceCents);
+					}
+					else {
+						balance = "0,"+balanceCents;
+					}
+				} else {
+					if(balanceCents<0){
+						balance = "-0,0"+Math.abs(balanceCents);
+					}
+					else {
+						balance = "0,0"+balanceCents;
+					}
+				}
+			}
 
-            if(transactions.length === 0 || balanceCents === 0){
-                balance = "0,00"
-            }
+			if(transactions.length === 0 || balanceCents === 0){
+				balance = "0,00";
+			}
             
-            const historic = {
-                transactions,
-                balance,
-                balanceStatus
-            };
+			const historic = {
+				transactions,
+				balance,
+				balanceStatus
+			};
             
 
-            res.send(historic);
-        } else {
-            res.sendStatus(401);
-        }
+			res.send(historic);
+		} else {
+			res.sendStatus(401);
+		}
         
-    } catch (e){
-        res.sendStatus(500);
-    }
+	} catch (e){
+		res.sendStatus(500);
+	}
 });
 
 app.post("/signin", async (req, res) => {
-    try {
-        const { email, password } = req.body;
+	try {
+		const { email, password } = req.body;
 
-        const errors = signinSchema.validate(req.body).error;
+		const errors = signinSchema.validate(req.body).error;
 
-        if(errors) return res.sendStatus(400);
+		if(errors) return res.sendStatus(400);
 
-        const result = await connection.query(
-            `SELECT * 
+		const result = await connection.query(
+			`SELECT * 
             FROM users 
             WHERE email = $1`,
-            [email]
-        );
+			[email]
+		);
         
-        if(result.rows.length === 0) return res.sendStatus(400);
+		if(result.rows.length === 0) return res.sendStatus(400);
 
-        const user = result.rows[0];
+		const user = result.rows[0];
 
-        if(user && bcrypt.compareSync(password, user.hash)){
-            const token = uuid();
+		if(user && bcrypt.compareSync(password, user.hash)){
+			const token = uuid();
 
-            await connection.query(
-                `INSERT INTO sessions ("userId", token)
+			await connection.query(
+				`INSERT INTO sessions ("userId", token)
                 VALUES ($1, $2)`, [user.id, token]
-            );
+			);
 
-            res.send({
-                id: user.id,
-                name: user.name,
-                token: token
-            });
-        }
-        else {
-            res.sendStatus(401);
-        }
+			res.send({
+				id: user.id,
+				name: user.name,
+				token: token
+			});
+		}
+		else {
+			res.sendStatus(401);
+		}
         
-    }catch(e){
-        console.log(e);
-        res.sendStatus(500);
-    }
+	}catch(e){
+		console.log(e);
+		res.sendStatus(500);
+	}
 });
 
 
 app.post("/signup", async (req, res)=> {
-    try {
-        const { name, email, password, rePassword } = req.body;
+	try {
+		const errors = newUserSchema.validate(req.body).error;
 
-        const errors = newUserSchema.validate(req.body).error;
+		if(errors) return res.sendStatus(400);
 
-        if(errors) return res.sendStatus(400);
+		const { name, email, password} = req.body;
 
-        const hash = bcrypt.hashSync(password, 12);
+		const hash = bcrypt.hashSync(password, 12);
 
-        const result = await connection.query(
-            `SELECT * FROM users
+		const result = await connection.query(
+			`SELECT * FROM users
             WHERE email = $1`,
-            [email]
-        );
+			[email]
+		);
 
-        let sanatizedName = name.trim();
-        sanatizedName = stripHtml(sanatizedName).result;
-        let sanatizedEmail = email.trim();
-        sanatizedEmail = stripHtml(sanatizedEmail).result;
+		let sanatizedName = name.trim();
+		sanatizedName = stripHtml(sanatizedName).result;
+		let sanatizedEmail = email.trim();
+		sanatizedEmail = stripHtml(sanatizedEmail).result;
 
-        if(result.rows.length === 0){
-            await connection.query(`
+		if(result.rows.length === 0){
+			await connection.query(`
                 INSERT INTO users 
                 (name, email, hash)
                 VALUES ($1, $2, $3)`,
-                [sanatizedName, sanatizedEmail, hash]
-            );  
+			[sanatizedName, sanatizedEmail, hash]
+			);  
 
-            res.sendStatus(201);
-        } else {
-            res.sendStatus(409);
-        }
+			res.sendStatus(201);
+		} else {
+			res.sendStatus(409);
+		}
         
-    } catch(e){
-        console.log(e);
-        res.sendStatus(500);
-    }
+	} catch(e){
+		console.log(e);
+		res.sendStatus(500);
+	}
 });
 
 export default app;
