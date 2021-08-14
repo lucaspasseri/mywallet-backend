@@ -1,4 +1,5 @@
 /* eslint-disable no-undef */
+import "../setup.js";
 import supertest from "supertest";
 import app from "../app.js";
 import connection from "../database.js";

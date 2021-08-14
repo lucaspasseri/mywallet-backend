@@ -77,7 +77,6 @@ app.post("/historic/:op", async (req, res) => {
                 VALUES ($1, $2, $3, $4, $5)`,
 				[user.id, categoryId, Date.now(), sanatizedDescription, amount ]
 			);
-			console.log(7);
 			res.sendStatus(201);
 		} else {
 			res.sendStatus(401);
